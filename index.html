@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>양안 신경동조 2단계 돔 플리커 (WebXR / Oculus Quest)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #050508;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+      user-select: none;
+    }
+    #ui-container {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      width: 440px;
+      max-height: 94vh;
+      overflow-y: auto;
+      background: rgba(12, 18, 28, 0.88);
+      border: 1.5px solid #00c8f0;
+      border-radius: 12px;
+      padding: 14px;
+      color: #e0f0ff;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.7);
+      z-index: 1000;
+      backdrop-filter: blur(8px);
+    }
+    #ui-container::-webkit-scrollbar { width: 6px; }
+    #ui-container::-webkit-scrollbar-thumb { background: #008cb0; border-radius: 3px; }
+    h2 { margin: 0 0 6px 0; font-size: 15px; color: #00e5ff; }
+    .sub-desc { font-size: 11px; color: #9ab4cc; margin-bottom: 10px; line-height: 1.4; }
+    .section-box {
+      background: rgba(20, 30, 48, 0.6);
+      border: 1px solid rgba(0, 200, 240, 0.3);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+    .p1-box { border-color: rgba(0, 220, 255, 0.5); background: rgba(15, 35, 55, 0.5); }
+    .p2-box { border-color: rgba(240, 120, 210, 0.5); background: rgba(45, 25, 45, 0.5); }
+    .sec-title { font-size: 12px; font-weight: bold; margin-bottom: 6px; }
+    .p1-title { color: #00e5ff; }
+    .p2-title { color: #ff9ee2; }
+    .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 11px; }
+    .row label { flex: 1; }
+    .row input[type=range] { flex: 1.4; margin: 0 8px; accent-color: #00e5ff; }
+    .row .val-txt { width: 44px; text-align: right; font-weight: bold; color: #fff; }
+    .btn-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 4px; }
+    .btn-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px; }
+    .btn-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; }
+    button {
+      background: #162232;
+      border: 1px solid #324e6d;
+      color: #c0d4ea;
+      padding: 5px 2px;
+      font-size: 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    button:hover { background: #1e3550; border-color: #00c8f0; }
+    button.active { background: #008870; border-color: #00ffc8; color: #fff; font-weight: bold; }
+    #status-bar {
+      margin-top: 10px;
+      padding: 8px;
+      background: #0d1520;
+      border: 1px solid #2a4460;
+      border-radius: 6px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: bold;
+      color: #00ffc8;
+    }
+    #vr-btn-holder {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+    }
+  </style>
+  <!-- Three.js 최신 릴리스 및 WebXR 매니저 -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/webxr/VRButton.js"></script>
+</head>
+<body>
+  <div id="ui-container">
+    <h2>신경동조 2단계 돔 플리커 (Quest VR)</h2>
+    <div class="sub-desc">
+      • VR 컨트롤러: <b>[왼쪽 트리거]</b> 돔 반경 축소 | <b>[오른쪽 트리거]</b> 돔 반경 확대<br>
+      • 2단계 시퀀스: [전반부 프라이밍] → [후반부 고속 견인] → [휴식]
+    </div>
+
+    <!-- 1. 돔 반경 및 256 배경색 -->
+    <div class="section-box">
+      <div class="sec-title" style="color: #ffe680;">1. 돔 반경 & 배경색 (256단계)</div>
+      <div class="row">
+        <label>돔 반경(Radius):</label>
+        <input type="range" id="dome-radius" min="5" max="100" step="1" value="30">
+        <span class="val-txt" id="dome-radius-txt">30m</span>
+      </div>
+      <div class="row">
+        <label>배경 밝기(0~255):</label>
+        <input type="range" id="bg-shade" min="0" max="255" step="1" value="8">
+        <span class="val-txt" id="bg-shade-txt">8</span>
+      </div>
+      <div class="row">
+        <label>그리드 투명도:</label>
+        <input type="range" id="grid-opacity" min="0.05" max="0.8" step="0.05" value="0.25">
+        <span class="val-txt" id="grid-opacity-txt">0.25</span>
+      </div>
+    </div>
+
+    <!-- 2. 시퀀스 휴식 시간 -->
+    <div class="section-box">
+      <div class="row">
+        <label>시퀀스 후 휴식(OFF):</label>
+        <input type="range" id="off-time" min="0.5" max="8.0" step="0.5" value="3.0">
+        <span class="val-txt" id="off-time-txt">3.0초</span>
+      </div>
+    </div>
+
+    <!-- 3. 전반부 P1 (디폴트: 0.2%, 1.0Hz, 2회) -->
+    <div class="section-box p1-box">
+      <div class="sec-title p1-title">● 전반부 P1: 저밀도 서파 프라이밍 (기본: 0.2% | 1.0Hz | 2회)</div>
+      <div class="row">
+        <label>P1 픽셀 비율:</label>
+        <input type="range" id="p1-blur" min="0.1" max="0.6" step="0.05" value="0.2">
+        <span class="val-txt" id="p1-blur-txt">0.2%</span>
+      </div>
+      <div class="row">
+        <label>P1 주파수:</label>
+        <input type="range" id="p1-freq" min="0.5" max="2.0" step="0.1" value="1.0">
+        <span class="val-txt" id="p1-freq-txt">1.0Hz</span>
+      </div>
+      <div class="row">
+        <label>P1 깜빡임 횟수:</label>
+        <input type="range" id="p1-count" min="1" max="5" step="1" value="2">
+        <span class="val-txt" id="p1-count-txt">2회</span>
+      </div>
+    </div>
+
+    <!-- 4. 후반부 P2 (디폴트: 0.4%, 2.0Hz, 5회) -->
+    <div class="section-box p2-box">
+      <div class="sec-title p2-title">★ 후반부 P2: 고속 견인 버스트 (기본: 0.4% | 2.0Hz | 5회)</div>
+      <div class="row">
+        <label>P2 픽셀 비율:</label>
+        <input type="range" id="p2-blur" min="0.2" max="1.0" step="0.05" value="0.4">
+        <span class="val-txt" id="p2-blur-txt">0.4%</span>
+      </div>
+      <div class="row">
+        <label>P2 주파수:</label>
+        <input type="range" id="p2-freq" min="1.0" max="4.0" step="0.2" value="2.0">
+        <span class="val-txt" id="p2-freq-txt">2.0Hz</span>
+      </div>
+      <div class="row">
+        <label>P2 깜빡임 횟수:</label>
+        <input type="range" id="p2-count" min="2" max="10" step="1" value="5">
+        <span class="val-txt" id="p2-count-txt">5회</span>
+      </div>
+    </div>
+
+    <!-- 5. 20개 테마 (17번 기본 활성화) -->
+    <div class="section-box">
+      <div class="sec-title" style="color: #a0d8ef;">5. 컬러 테마 선택 (현재: 17번 슬레이트바이올렛↔더스티로즈)</div>
+      <div style="font-size: 10px; color: #8cb0cc; margin-top:2px;">• 다크 테마 (1~10):</div>
+      <div class="btn-grid" id="theme-dark-btns"></div>
+      <div style="font-size: 10px; color: #ffdc73; margin-top:5px;">• 화이트 A 폴리시드 메탈릭 (11~16):</div>
+      <div class="btn-grid-3" id="theme-wha-btns"></div>
+      <div style="font-size: 10px; color: #ffaae0; margin-top:5px;">• 화이트 B 하이브리드 진정형 (17~20):</div>
+      <div class="btn-grid" id="theme-whb-btns" style="grid-template-columns: repeat(4, 1fr);"></div>
+    </div>
+
+    <div id="status-bar">상태: 준비 중...</div>
+  </div>
+
+  <div id="vr-btn-holder"></div>
+
+  <script>
+    // ---------------- 1. 테마 데이터베이스 (20종) ----------------
+    const COLOR_SETS = {
+      1:  { name: "1. 연두 ↔ 핑크", a: [0.20, 1.0, 0.38], b: [1.0, 0.12, 0.68], metal: false },
+      2:  { name: "2. 단풍 적홍 ↔ 바랜 은행", a: [0.98, 0.24, 0.08], b: [0.94, 0.76, 0.22], metal: false },
+      3:  { name: "3. 네온 시안 ↔ 마젠타", a: [0.0, 0.94, 1.0], b: [1.0, 0.0, 0.70], metal: false },
+      4:  { name: "4. 에메랄드 ↔ 앰버 골드", a: [0.06, 0.92, 0.51], b: [1.0, 0.68, 0.08], metal: false },
+      5:  { name: "5. 울트라 바이올렛 ↔ 라임", a: [0.55, 0.18, 1.0], b: [0.70, 1.0, 0.12], metal: false },
+      6:  { name: "6. 아이스 블루 ↔ 코랄 텐저린", a: [0.31, 0.78, 1.0], b: [1.0, 0.39, 0.23], metal: false },
+      7:  { name: "7. 아쿠아 마린 ↔ 로즈 퍼플", a: [0.0, 1.0, 0.75], b: [0.90, 0.27, 0.78], metal: false },
+      8:  { name: "8. 일렉트릭 블루 ↔ 골든 옐로우", a: [0.12, 0.55, 1.0], b: [1.0, 0.84, 0.0], metal: false },
+      9:  { name: "9. 민트 그린 ↔ 루비 레드", a: [0.25, 1.0, 0.63], b: [1.0, 0.16, 0.35], metal: false },
+      10: { name: "10. 오로라 바이올렛 ↔ 세이지 틸", a: [0.68, 0.31, 1.0], b: [0.16, 0.90, 0.78], metal: false },
+
+      11: { name: "11. 폴리시드 틸 ↔ 순금 골드", a: [0.06, 0.45, 0.51], b: [0.96, 0.72, 0.12], metal: true },
+      12: { name: "12. 건메탈 블루 ↔ 로즈 코퍼", a: [0.14, 0.29, 0.45], b: [0.88, 0.41, 0.33], metal: true },
+      13: { name: "13. 크롬 포레스트 ↔ 황동 브라스", a: [0.08, 0.43, 0.27], b: [0.86, 0.68, 0.14], metal: true },
+      14: { name: "14. 사파이어 인디고 ↔ 앤틱 앰버", a: [0.16, 0.24, 0.53], b: [0.92, 0.57, 0.12], metal: true },
+      15: { name: "15. 미러 플럼 ↔ 올리브 골드", a: [0.45, 0.16, 0.41], b: [0.70, 0.66, 0.18], metal: true },
+      16: { name: "16. 옵시디언 틸 ↔ 메탈릭 오렌지", a: [0.07, 0.38, 0.42], b: [0.90, 0.37, 0.14], metal: true },
+
+      17: { name: "17. 슬레이트 바이올렛 ↔ 더스티 로즈", a: [0.37, 0.27, 0.57], b: [0.82, 0.49, 0.54], metal: "hybrid" },
+      18: { name: "18. 차콜 네이비 ↔ 세이지 민트", a: [0.15, 0.23, 0.35], b: [0.51, 0.72, 0.61], metal: "hybrid" },
+      19: { name: "19. 딥 모스 그린 ↔ 파우더 블루", a: [0.20, 0.37, 0.24], b: [0.49, 0.66, 0.80], metal: "hybrid" },
+      20: { name: "20. 번트 엄버 골드 ↔ 모브 라벤더", a: [0.57, 0.29, 0.18], b: [0.68, 0.54, 0.72], metal: "hybrid" }
+    };
+
+    // ---------------- 2. 시스템 상태 및 기본값 ----------------
+    const params = {
+      color_set: 17, // 17번 디폴트
+      dome_radius: 30.0,
+      bg_shade: 8,   // 0~255 밤하늘 어두운 디폴트
+      grid_opacity: 0.25,
+      off_duration: 3.0,
+
+      // 전반부 P1 (0.2%, 1.0Hz, 2회)
+      p1_blur: 0.2,
+      p1_freq: 1.0,
+      p1_count: 2,
+
+      // 후반부 P2 (0.4%, 2.0Hz, 5회)
+      p2_blur: 0.4,
+      p2_freq: 2.0,
+      p2_count: 5
+    };
+
+    // ---------------- 3. Three.js & WebXR 세팅 ----------------
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 2000);
+    camera.position.set(0, 1.6, 0); // VR 사용자 눈높이
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true; // WebXR 활성화 (Quest 최적화)
+    document.body.appendChild(renderer.domElement);
+
+    // VR 버튼 마운트
+    document.getElementById('vr-btn-holder').appendChild(VRButton.createButton(renderer));
+
+    // PC 프리뷰용 마우스 회전 컨트롤
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1.6, -1);
+    controls.update();
+
+    // ---------------- 4. 큰 돔(Dome) 및 회색 그리드 메시 구성 ----------------
+    let domeMesh, gridMesh;
+    const TOTAL_DOME_POINTS = 16000; // 돔 표면 별빛 후보 정점 수
+
+    function createOrUpdateDome() {
+      if (domeMesh) scene.remove(domeMesh);
+      if (gridMesh) scene.remove(gridMesh);
+
+      const R = params.dome_radius;
+      // 반구 돔 지오메트리 (위쪽 반구)
+      const domeGeo = new THREE.SphereGeometry(R, 64, 32, 0, Math.PI * 2, 0, Math.PI * 0.52);
+
+      // 1) 256단계 배경색을 가진 돔 내부 면
+      const shadeVal = params.bg_shade / 255.0;
+      const domeMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(shadeVal, shadeVal, shadeVal * 1.08),
+        side: THREE.BackSide,
+        depthWrite: false
+      });
+      domeMesh = new THREE.Mesh(domeGeo, domeMat);
+      scene.add(domeMesh);
+
+      // 2) 회색 그리드 와이어프레임 (돔 내부 매핑)
+      const gridMat = new THREE.MeshBasicMaterial({
+        color: 0x4a5568,
+        wireframe: true,
+        transparent: true,
+        opacity: params.grid_opacity,
+        side: THREE.BackSide
+      });
+      gridMesh = new THREE.Mesh(domeGeo, gridMat);
+      scene.add(gridMesh);
+
+      rebuildFlickerParticles();
+    }
+
+    // ---------------- 5. 돔 표면 반짝이는 별빛 파티클 시스템 ----------------
+    // 백화 현상 방지: NormalBlending 적용 및 비선형 셰이더 내장
+    let pointsMesh = null;
+    let pointData = []; // { x, y, z, phase, seed, idx }
+
+    function generateDomePointsPool() {
+      pointData = [];
+      const R = params.dome_radius * 0.995; // 돔 바로 안쪽에 배치
+      for (let i = 0; i < TOTAL_DOME_POINTS; i++) {
+        const u = Math.random();
+        const v = Math.random();
+        const theta = u * 2.0 * Math.PI;
+        const phi = Math.acos(1.0 - v * 0.95); // 반구 위쪽 집중
+
+        const x = R * Math.sin(phi) * Math.cos(theta);
+        const y = R * Math.cos(phi);
+        const z = R * Math.sin(phi) * Math.sin(theta);
+
+        const phase = (i % 2 === 0) ? 1.0 : -1.0;
+        const seed = Math.random();
+        pointData.push({ x, y, z, phase, seed, idx: i });
+      }
+    }
+
+    let p1_indices = [];
+    let p2_indices = [];
+
+    function rebuildFlickerParticles() {
+      generateDomePointsPool();
+
+      // P1, P2 인덱스 서브셋 분리 추출
+      const p1_count = Math.max(8, Math.floor(TOTAL_DOME_POINTS * (params.p1_blur / 100.0)));
+      const p2_count = Math.max(16, Math.floor(TOTAL_DOME_POINTS * (params.p2_blur / 100.0)));
+
+      p1_indices = [];
+      p2_indices = [];
+
+      for (let i = 0; i < p1_count; i++) p1_indices.push(i);
+      for (let i = 0; i < p2_count; i++) p2_indices.push(i);
+
+      if (pointsMesh) scene.remove(pointsMesh);
+
+      const maxCount = Math.max(p1_count, p2_count);
+      const geo = new THREE.BufferGeometry();
+      const posArr = new Float32Array(maxCount * 3);
+      const colArr = new Float32Array(maxCount * 3);
+      const sizeArr = new Float32Array(maxCount);
+
+      geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
+      geo.setAttribute('size', new THREE.BufferAttribute(sizeArr, 1));
+
+      // 백화 현상 방지: NormalBlending 강제 사용
+      const mat = new THREE.PointsMaterial({
+        size: 0.45,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.98,
+        blending: THREE.NormalBlending, // 가이드라인 준수: Additive 금지
+        depthWrite: false
+      });
+
+      pointsMesh = new THREE.Points(geo, mat);
+      scene.add(pointsMesh);
+    }
+
+    createOrUpdateDome();
+
+    // ---------------- 6. WebXR 컨트롤러 트리거 (반경 축소/확대) ----------------
+    // 왼쪽 트리거: 반경 작게 | 오른쪽 트리거: 반경 크게
+    const controller0 = renderer.xr.getController(0); // Right
+    const controller1 = renderer.xr.getController(1); // Left
+    scene.add(controller0);
+    scene.add(controller1);
+
+    let leftTriggerDown = false;
+    let rightTriggerDown = false;
+
+    controller0.addEventListener('selectstart', () => { rightTriggerDown = true; });
+    controller0.addEventListener('selectend',   () => { rightTriggerDown = false; });
+    controller1.addEventListener('selectstart', () => { leftTriggerDown = true; });
+    controller1.addEventListener('selectend',   () => { leftTriggerDown = false; });
+
+    // ---------------- 7. 실시간 렌더 루프 및 2단계 시퀀스 ----------------
+    const clock = new THREE.Clock();
+    const statusBar = document.getElementById('status-bar');
+
+    renderer.setAnimationLoop(() => {
+      const delta = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
+
+      // VR 트리거 실시간 반경 조절
+      if (leftTriggerDown) {
+        params.dome_radius = Math.max(5.0, params.dome_radius - 12.0 * delta);
+        document.getElementById('dome-radius').value = params.dome_radius;
+        document.getElementById('dome-radius-txt').innerText = params.dome_radius.toFixed(0) + 'm';
+        createOrUpdateDome();
+      }
+      if (rightTriggerDown) {
+        params.dome_radius = Math.min(100.0, params.dome_radius + 12.0 * delta);
+        document.getElementById('dome-radius').value = params.dome_radius;
+        document.getElementById('dome-radius-txt').innerText = params.dome_radius.toFixed(0) + 'm';
+        createOrUpdateDome();
+      }
+
+      // 시퀀스 시간 계산
+      const dur_p1 = params.p1_count / params.p1_freq;
+      const dur_p2 = params.p2_count / params.p2_freq;
+      const total_stim = dur_p1 + dur_p2;
+      const total_cycle = total_stim + params.off_duration;
+
+      const t_cycle = elapsed % total_cycle;
+
+      let current_stage = "OFF";
+      let cur_freq = 1.0;
+      let cur_local_t = 0.0;
+      let active_idx_list = [];
+
+      if (t_cycle < dur_p1) {
+        current_stage = "P1";
+        cur_freq = params.p1_freq;
+        cur_local_t = t_cycle;
+        active_idx_list = p1_indices;
+        statusBar.innerText = `[1단계 프라이밍] ${params.p1_blur}% 저밀도 1.0Hz 동조 중... (${(dur_p1 - t_cycle).toFixed(1)}초)`;
+        statusBar.style.color = "#00e5ff";
+      } else if (t_cycle < total_stim) {
+        current_stage = "P2";
+        cur_freq = params.p2_freq;
+        cur_local_t = t_cycle - dur_p1;
+        active_idx_list = p2_indices;
+        statusBar.innerText = `[2단계 버스트] ${params.p2_blur}% 고밀도 2.0Hz 고속 견인 중! (${(total_stim - t_cycle).toFixed(1)}초)`;
+        statusBar.style.color = "#ff8fe0";
+      } else {
+        current_stage = "OFF";
+        statusBar.innerText = `[휴식 대기 중] 리듬 이완 단계... (${(total_cycle - t_cycle).toFixed(1)}초)`;
+        statusBar.style.color = "#ffc83b";
+      }
+
+      // 파티클 지오메트리 갱신
+      if (pointsMesh) {
+        const posAttr = pointsMesh.geometry.attributes.position;
+        const colAttr = pointsMesh.geometry.attributes.color;
+        const cur_set = COLOR_SETS[params.color_set];
+        const is_metal = cur_set.metal;
+
+        const temporal = Math.sin(cur_local_t * cur_freq * Math.PI * 2.0);
+
+        if (current_stage === "OFF") {
+          // 쉬는 시간: 모든 별 숨김
+          for (let i = 0; i < posAttr.count; i++) {
+            colAttr.setXYZ(i, 0, 0, 0);
+          }
+        } else {
+          const activeLen = active_idx_list.length;
+          for (let i = 0; i < posAttr.count; i++) {
+            if (i < activeLen) {
+              const pt = pointData[active_idx_list[i]];
+              posAttr.setXYZ(i, pt.x, pt.y, pt.z);
+
+              const sig = pt.phase * temporal;
+              const intensity = Math.abs(sig);
+
+              if (intensity > 0.05) {
+                const is_phase_a = (sig > 0.0);
+                const baseCol = is_phase_a ? cur_set.a : cur_set.b;
+
+                let applyMetal = false;
+                if (is_metal === true) applyMetal = true;
+                else if (is_metal === "hybrid" && is_phase_a) applyMetal = true;
+
+                let r, g, b;
+                if (applyMetal) {
+                  // 순수 유광 폴리시드 핫스팟 연산
+                  const specular = Math.pow(intensity, 4.0);
+                  const glint = Math.sin(elapsed * 4.0 + pt.seed * 6.28) * 0.5 + 0.5;
+                  const boost = specular * glint * 1.5;
+
+                  const br = baseCol[0] * intensity;
+                  const bg = baseCol[1] * intensity;
+                  const bb = baseCol[2] * intensity;
+
+                  r = Math.min(1.0, br + (1.0 - br) * (specular * 0.85 + boost * 0.35));
+                  g = Math.min(1.0, bg + (1.0 - bg) * (specular * 0.80 + boost * 0.35));
+                  b = Math.min(1.0, bb + (0.95 - bb) * (specular * 0.65 + boost * 0.25));
+                } else {
+                  r = baseCol[0] * intensity;
+                  g = baseCol[1] * intensity;
+                  b = baseCol[2] * intensity;
+                }
+                colAttr.setXYZ(i, r, g, b);
+              } else {
+                colAttr.setXYZ(i, 0, 0, 0);
+              }
+            } else {
+              colAttr.setXYZ(i, 0, 0, 0);
+            }
+          }
+        }
+        posAttr.needsUpdate = true;
+        colAttr.needsUpdate = true;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
+    // ---------------- 8. UI 이벤트 바인딩 ----------------
+    function bindSlider(id, paramKey, unit, cb) {
+      const el = document.getElementById(id);
+      const txt = document.getElementById(id + '-txt');
+      el.addEventListener('input', (e) => {
+        params[paramKey] = parseFloat(e.target.value);
+        txt.innerText = params[paramKey] + unit;
+        if (cb) cb();
+      });
+    }
+
+    bindSlider('dome-radius', 'dome_radius', 'm', createOrUpdateDome);
+    bindSlider('bg-shade', 'bg_shade', '', createOrUpdateDome);
+    bindSlider('grid-opacity', 'grid_opacity', '', createOrUpdateDome);
+    bindSlider('off-time', 'off_duration', '초');
+
+    bindSlider('p1-blur', 'p1_blur', '%', rebuildFlickerParticles);
+    bindSlider('p1-freq', 'p1_freq', 'Hz');
+    bindSlider('p1-count', 'p1_count', '회');
+
+    bindSlider('p2-blur', 'p2_blur', '%', rebuildFlickerParticles);
+    bindSlider('p2-freq', 'p2_freq', 'Hz');
+    bindSlider('p2-count', 'p2_count', '회');
+
+    // 테마 버튼 20종 동적 생성
+    function renderThemeBtns() {
+      const dBox = document.getElementById('theme-dark-btns');
+      const waBox = document.getElementById('theme-wha-btns');
+      const wbBox = document.getElementById('theme-whb-btns');
+
+      for (let i = 1; i <= 20; i++) {
+        const btn = document.createElement('button');
+        btn.id = `theme-btn-${i}`;
+        if (i === params.color_set) btn.className = 'active';
+
+        if (i <= 10) {
+          btn.innerText = `D-${i}`;
+          btn.onclick = () => selectTheme(i);
+          dBox.appendChild(btn);
+        } else if (i <= 16) {
+          btn.innerText = `W-A ${i}`;
+          btn.onclick = () => selectTheme(i);
+          waBox.appendChild(btn);
+        } else {
+          btn.innerText = `W-B ${i}`;
+          btn.onclick = () => selectTheme(i);
+          wbBox.appendChild(btn);
+        }
+      }
+    }
+
+    function selectTheme(idx) {
+      params.color_set = idx;
+      document.querySelectorAll('#ui-container button').forEach(b => b.classList.remove('active'));
+      const actBtn = document.getElementById(`theme-btn-${idx}`);
+      if (actBtn) actBtn.classList.add('active');
+    }
+
+    renderThemeBtns();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
